@@ -17,6 +17,8 @@ Usage:
     qtree.py ask "prompt"          walk the tree; run the leaf tool or report no-path
     qtree.py grow "question" --parent <q-slug> --tool <name>   scaffold a branch
                                                (tool code via stdin)
+    qtree.py witness <q-slug> "mark"   log a divergence/constraint where a builder stopped
+    qtree.py inbox                 list prompts dropped in .inbox/
     qtree.py log                   show the growth history (git log of questions)
     qtree.py map                   print the whole question tree
 
@@ -67,6 +69,15 @@ def leaves(path):
     return tools, skills, answers
 
 
+def witness_marks(path):
+    """Divergence log: where builders stopped, pivoted, or hit constraints."""
+    wm = os.path.join(path, "WITNESS_MARKS.md")
+    if os.path.exists(wm):
+        with open(wm) as f:
+            return f.read().strip()
+    return None
+
+
 def score(prompt, question):
     pt, qt = tokens(prompt), tokens(question)
     if not qt:
@@ -86,6 +97,9 @@ def ask(prompt):
         return 1
     tools, skills, answers = leaves(p)
     print(f"path: {s}/  (matched: \"{q}\"  score {best:.2f})")
+    wm = witness_marks(p)
+    if wm:
+        print(f"witness marks at {s}/:\n{wm}\n---")
     if skills:
         sk = skills[0]
         sm = os.path.join(p, sk, "SKILL.md")
@@ -163,6 +177,35 @@ def log():
     print(r.stdout.strip() or "(no commits yet)")
 
 
+def witness(slug_arg, mark):
+    matches = [p for s, p, q in questions() if s == slug_arg]
+    if not matches:
+        sys.exit(f"no such question folder: {slug_arg}")
+    p = matches[0]
+    wm = os.path.join(p, "WITNESS_MARKS.md")
+    from datetime import date
+    entry = f"\n## {date.today().isoformat()}\n* {mark.strip()}\n"
+    with open(wm, "a") as f:
+        if not os.path.exists(wm) or os.path.getsize(wm) == 0:
+            f.write("# Witness Marks: divergence & constraints\n")
+        f.write(entry)
+    run(["git", "add", wm])
+    run(["git", "commit", "-q", "-m", f"witness: {slug_arg} — {mark.strip()[:60]}"])
+    print(f"witnessed at {slug_arg}/")
+
+
+def inbox():
+    box = os.path.join(HERE, ".inbox")
+    os.makedirs(box, exist_ok=True)
+    prompts = sorted(f for f in os.listdir(box) if f.endswith(".txt"))
+    if not prompts:
+        print("(inbox empty — drop a prompt .txt in .inbox/)")
+        return
+    for f in prompts:
+        with open(os.path.join(box, f)) as fh:
+            print(f"[{f}] {fh.read().strip()[:100]}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit("usage: qtree.py ask|grow|map|log ...")
@@ -181,5 +224,11 @@ if __name__ == "__main__":
         map_tree()
     elif cmd == "log":
         log()
+    elif cmd == "witness":
+        if len(sys.argv) < 4:
+            sys.exit('usage: qtree.py witness <question-slug> "<mark>"')
+        witness(sys.argv[2], " ".join(sys.argv[3:]))
+    elif cmd == "inbox":
+        inbox()
     else:
         sys.exit(f"unknown command: {cmd}")
