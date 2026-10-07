@@ -58,11 +58,13 @@ def questions():
 
 
 def leaves(path):
-    """Tool and answer leaves directly inside a question folder."""
+    """Tool, skill, and answer leaves directly inside a question folder."""
     tools = sorted(f for f in os.listdir(path)
                    if f.startswith("tool-") and os.access(os.path.join(path, f), os.X_OK))
+    skills = sorted(d for d in os.listdir(path)
+                    if d.startswith("skill-") and os.path.isdir(os.path.join(path, d)))
     answers = sorted(f for f in os.listdir(path) if f == "answer.md")
-    return tools, answers
+    return tools, skills, answers
 
 
 def score(prompt, question):
@@ -82,8 +84,16 @@ def ask(prompt):
     if best < 0.34:
         print(f"no-path: nothing close. closest was '{q}' (score {best:.2f}). grow it.")
         return 1
-    tools, answers = leaves(p)
+    tools, skills, answers = leaves(p)
     print(f"path: {s}/  (matched: \"{q}\"  score {best:.2f})")
+    if skills:
+        sk = skills[0]
+        sm = os.path.join(p, sk, "SKILL.md")
+        print(f"skill: {sk}/")
+        if os.path.exists(sm):
+            with open(sm) as f:
+                print(f.read().strip()[:600])
+        return 0
     if tools:
         t = tools[0]
         print(f"crank: running {t}")
@@ -142,6 +152,8 @@ def map_tree():
             print("  " * depth + f"{name}/")
         for t in sorted(f for f in files if f.startswith("tool-")):
             print("  " * (depth + 1) + f"[{t}]")
+        for d in sorted(d for d in dirs if d.startswith("skill-")):
+            print("  " * (depth + 1) + f"[{d}/ skill]")
         for a in sorted(f for f in files if f == "answer.md"):
             print("  " * (depth + 1) + "[answer.md]")
 
